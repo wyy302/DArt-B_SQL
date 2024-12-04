@@ -398,3 +398,39 @@ SET
         WHERE o.customer_id = c.customer_id
     );
 ```
+
+**추가 질문**
+
+1. 정답 쿼리에서 `repurchase_rate`를 구할 때 사용한 `HAVING COUNT(order_details.product_id) > 1`의 의미는 무엇인가요?
+
+```
+HAVING COUNT(order_details.product_id) > 1은 재구매율을 계산하는 과정에서 특정 고객이 두 번 이상 구매한 제품을 식별하기 위해 사용됨
+```
+
+2. 이 문제에서 사용될 수 있는 성능을 최적화하기 위한 방법은 무엇인가요?
+
+```
+계산 결과 저장 및 업데이트
+
+각 고객별 주요 데이터를 미리 계산해 테이블에 저장하면 성능을 최적화 할 수 있음
+```
+
+```SQL
+CREATE TABLE customer_stats AS
+SELECT 
+    o.customer_id,
+    AVG(od.quantity * od.unit_price) AS avg_order_value,
+    SUM(od.quantity * od.unit_price) AS total_spent,
+    COUNT(DISTINCT o.order_id) AS num_orders,
+    COUNT(DISTINCT CASE WHEN od.product_id IN (
+        SELECT product_id
+        FROM order_details
+        JOIN orders o2 ON order_details.order_id = o2.order_id
+        WHERE o2.customer_id = o.customer_id
+        GROUP BY order_details.product_id
+        HAVING COUNT(order_details.product_id) > 1
+    ) THEN od.product_id END) * 1.0 / COUNT(DISTINCT od.product_id) AS repurchase_rate
+FROM order_details od
+JOIN orders o ON od.order_id = o.order_id
+GROUP BY o.customer_id;
+```
