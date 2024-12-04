@@ -322,3 +322,79 @@ SELECT * FROM employees WHERE department = 'IT';
     - product_stats 테이블의 통계치들을 최신 주문 내역을 바탕으로 업데이트하는 쿼리
 
     - 이런 식으로 계산 결과를 저장하고 주기적으로 업데이트하면, 복잡한 실시간 쿼리의 부담을 크게 줄일 수 있음
+
+---
+
+## 문제 풀이
+
+
+**문제**
+
+여러분은 `customer_orders`라는 테이블을 관리하는 데이터베이스 관리자로 일하고 있습니다. 이 테이블에는 고객의 주문 정보가 저장되어 있으며, 각 고객이 주문한 제품과 수량, 가격 정보가 포함되어 있습니다. 또한, 고객들이 특정 제품을 재구매한 비율을 계산하려고 합니다.
+
+### 테이블 구조:
+
+1. **customers** 테이블
+    - `customer_id` (고객 ID, PRIMARY KEY)
+    - `name` (고객 이름)
+2. **orders** 테이블
+    - `order_id` (주문 ID, PRIMARY KEY)
+    - `customer_id` (고객 ID, FOREIGN KEY)
+    - `order_date` (주문 날짜)
+3. **order_details** 테이블
+    - `order_id` (주문 ID, FOREIGN KEY)
+    - `product_id` (제품 ID)
+    - `quantity` (수량)
+    - `unit_price` (단가)
+
+
+
+### 요구 사항:
+
+1. **`avg_order_value`**: 고객별 평균 주문 금액을 계산하여 `customers` 테이블에 업데이트하세요.
+    - `avg_order_value`는 각 고객이 한 번의 주문에서 지출한 평균 금액입니다.
+2. **`total_spent`**: 고객별 총 지출 금액을 계산하여 `customers` 테이블에 업데이트하세요.
+    - `total_spent`는 고객이 지금까지 지출한 총 금액입니다.
+3. **`num_orders`**: 고객이 총 몇 번의 주문을 했는지 계산하여 `customers` 테이블에 업데이트하세요.
+    - `num_orders`는 고객이 주문한 총 개수입니다.
+4. **`repurchase_rate`**: 고객의 재구매 비율을 계산하여 `customers` 테이블에 업데이트하세요.
+    - `repurchase_rate`는 각 고객이 2번 이상 주문한 제품 비율을 의미합니다. (즉, 재구매한 제품이 전체 구매 제품 중 몇 퍼센트를 차지하는지)
+
+
+**정답**
+
+```SQL
+UPDATE customers c
+SET
+    avg_order_value = (
+        SELECT AVG(od.quantity * od.unit_price)
+        FROM order_details od
+        JOIN orders o ON od.order_id = o.order_id
+        WHERE o.customer_id = c.customer_id
+    ),
+    total_spent = (
+        SELECT SUM(od.quantity * od.unit_price)
+        FROM order_details od
+        JOIN orders o ON od.order_id = o.order_id
+        WHERE o.customer_id = c.customer_id
+    ),
+    num_orders = (
+        SELECT COUNT(DISTINCT o.order_id)
+        FROM orders o
+        WHERE o.customer_id = c.customer_id
+    ),
+    repurchase_rate = (
+        SELECT
+            COUNT(DISTINCT CASE WHEN od.product_id IN (
+                SELECT product_id
+                FROM order_details
+                JOIN orders o ON order_details.order_id = o.order_id
+                WHERE o.customer_id = c.customer_id
+                GROUP BY order_details.product_id
+                HAVING COUNT(order_details.product_id) > 1
+            ) THEN od.product_id END) * 1.0 / COUNT(DISTINCT od.product_id)
+        FROM order_details od
+        JOIN orders o ON od.order_id = o.order_id
+        WHERE o.customer_id = c.customer_id
+    );
+```
